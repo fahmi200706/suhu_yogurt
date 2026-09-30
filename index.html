@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistem Pemantauan Suhu dan Kelembapan Mikroklimat Plain Yogurt</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #F1F5F9;
+    --grad: linear-gradient(135deg, #2563EB 0%, #38BDF8 100%);
+    --grad-halus: linear-gradient(135deg, #EFF6FF 0%, #F0F9FF 100%);
+    --kartu: #FFFFFF;
+    --garis: #E2E8F0;
+    --teks: #0F172A;
+    --lembut: #64748B;
+    --biru: #2563EB;
+    --biru-muda: #DBEAFE;
+    --hijau: #059669;
+    --hijau-muda: #D1FAE5;
+    --kuning: #D97706;
+    --kuning-muda: #FEF3C7;
+    --merah: #DC2626;
+    --merah-muda: #FEE2E2;
+    --bayang: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  }
+  body.dark {
+    --bg: #0B1220;
+    --grad: linear-gradient(135deg, #1D4ED8 0%, #0EA5E9 100%);
+    --grad-halus: linear-gradient(135deg, #111C31 0%, #0E1B2E 100%);
+    --kartu: #131C2E;
+    --garis: #24334D;
+    --teks: #F1F5F9;
+    --lembut: #94A3B8;
+    --biru: #60A5FA;
+    --biru-muda: #1E3A5F;
+    --hijau: #34D399;
+    --hijau-muda: #0F3D2E;
+    --kuning: #FBBF24;
+    --kuning-muda: #453411;
+    --merah: #F87171;
+    --merah-muda: #4C1D1D;
+    --bayang: 0 1px 3px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--teks);
+    line-height: 1.55;
+    padding: 16px;
+  }
+
+  /* ---------- kerangka dashboard ---------- */
+  .wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 14px; }
+
+  .papan {
+    display: grid;
+    grid-template-columns: 300px 1fr 330px;
+    grid-template-areas: "bacaan grafik devices" "bacaan grafik udara";
+    gap: 14px;
+    align-items: start;
+  }
+  .zona-bacaan  { grid-area: bacaan; display: grid; gap: 14px; align-content: start; }
+  .zona-grafik  { grid-area: grafik; }
+  .zona-udara   { grid-area: udara; }
+  .zona-perangkat { grid-area: devices; display: grid; gap: 14px; align-content: start; }
+
+  .kartu {
+    background: var(--kartu);
+    border: 1px solid var(--garis);
+    border-radius: 12px;
+    box-shadow: var(--bayang);
+    padding: 16px;
+  }
+  .kepala { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+  .kartu-judul { font-size: .95rem; font-weight: 600; }
+  .kartu-ketinya { font-size: .78rem; color: var(--lembut); }
+
+  /* ---------- header ---------- */
+  .header {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    gap: 14px;
+    background: var(--grad);
+    border-radius: 14px;
+    padding: 18px 20px;
+    color: #fff;
+  }
+  .judul { font-size: 1.2rem; font-weight: 700; }
+  .subjudul { font-size: .82rem; opacity: .85; }
+  .sumber { font-size: .76rem; opacity: .9; margin-top: 4px; }
+  .sumber .titik {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: #FCD34D; margin-right: 6px; vertical-align: middle;
+  }
+  .sambar-hidup .titik { background: #86EFAC; }
+  .kanan { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .jam {
+    font-size: .95rem; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    background: rgba(255,255,255,.18);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px; padding: 6px 12px;
+  }
+  .tombol {
+    font-family: inherit; font-size: .78rem;
+    color: var(--lembut); background: var(--kartu);
+    border: 1px solid var(--garis); border-radius: 7px;
+    padding: 5px 11px; cursor: pointer;
+  }
+  .tombol:hover { border-color: var(--biru); color: var(--biru); }
+  .tombol.aktif { background: var(--grad); border-color: transparent; color: #fff; }
+  .header .tombol {
+    color: #fff; background: rgba(255,255,255,.16);
+    border-color: rgba(255,255,255,.35);
+  }
+  .header .tombol:hover { background: rgba(255,255,255,.28); color: #fff; }
+
+  /* ---------- kartu angka besar ---------- */
+  .angka-kartu { position: relative; overflow: hidden; }
+  .angka-kartu::before {
+    content: ""; position: absolute; inset: 0;
+    background: var(--grad-halus); pointer-events: none;
+  }
+  .angka-kartu > * { position: relative; }
+  .angka-label { font-size: .8rem; color: var(--lembut); }
+  .angka-nilai {
+    font-size: 2.6rem; font-weight: 700; line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .angka-satuan { font-size: 1rem; font-weight: 500; color: var(--lembut); margin-left: 4px; }
+  .angka-ketinya { font-size: .78rem; color: var(--lembut); margin-top: 2px; }
+  .mini { display: flex; gap: 14px; margin-top: 10px; font-size: .76rem; color: var(--lembut); }
+  .mini b { color: var(--teks); font-weight: 600; }
+
+  .status {
+    display: inline-block; font-size: .72rem; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px; margin-top: 10px;
+  }
+  .status.ok { background: var(--hijau-muda); color: var(--hijau); }
+  .status.amber { background: var(--kuning-muda); color: var(--kuning); }
+  .status.merah { background: var(--merah-muda); color: var(--merah); }
+
+  /* ---------- nilai optimal, teks saja ---------- */
+  .monitor { display: grid; gap: 8px; margin-top: 12px; }
+  .monitor-baris {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 7px 11px;
+    background: var(--grad-halus);
+    border: 1px solid var(--garis);
+    border-radius: 8px;
+  }
+  .monitor-nama { font-size: .82rem; color: var(--lembut); }
+  .monitor-nilai { font-size: .82rem; font-weight: 600; }
+  .monitor-nilai.tepat { color: var(--hijau); }
+  .monitor-nilai.jauh { color: var(--merah); }
+
+  /* ---------- perangkat ---------- */
+  .perangkat { display: grid; gap: 10px; margin-top: 12px; }
+  .perangkat-kotak {
+    display: flex; align-items: center; gap: 11px;
+    padding: 11px 13px;
+    background: var(--grad-halus);
+    border: 1px solid var(--garis);
+    border-radius: 10px;
+  }
+  .perangkat-kotak.nyala-merah { border-color: var(--merah); background: var(--merah-muda); }
+  .perangkat-kotak.nyala-biru { border-color: var(--biru); background: var(--biru-muda); }
+  .perangkat-teks { display: flex; flex-direction: column; }
+  .perangkat-nama { font-size: .85rem; font-weight: 600; }
+  .perangkat-ketinya { font-size: .75rem; color: var(--lembut); }
+  .perangkat-pesan {
+    font-size: .78rem; color: var(--lembut);
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px solid var(--garis);
+  }
+
+  /* ---------- LED ---------- */
+  .led {
+    width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0;
+    background: var(--garis); border: 1px solid var(--lembut);
+  }
+  .led-merah.nyala { background: #EF4444; border-color: #EF4444; box-shadow: 0 0 7px rgba(239,68,68,.8); }
+  .led-biru.nyala { background: #3B82F6; border-color: #3B82F6; box-shadow: 0 0 7px rgba(59,130,246,.8); }
+
+  /* ---------- status udara ---------- */
+  .platform { font-size: .72rem; color: var(--lembut); }
+  .udara {
+    margin-top: 12px; padding: 12px 13px;
+    border: 1px solid var(--garis); border-radius: 10px;
+    background: var(--grad-halus);
+  }
+  .udara-judul { font-size: .84rem; font-weight: 600; line-height: 1.5; }
+  .udara-ketinya { font-size: .75rem; color: var(--lembut); margin-top: 4px; }
+  .udara.kering { background: var(--kuning-muda); border-color: var(--kuning); }
+  .udara.kering .udara-judul { color: var(--kuning); }
+  .udara.basah { background: var(--merah-muda); border-color: var(--merah); }
+  .udara.basah .udara-judul { color: var(--merah); }
+  .udara.optimal { background: var(--hijau-muda); border-color: var(--hijau); }
+  .udara.optimal .udara-judul { color: var(--hijau); }
+
+  .udara-detail { display: grid; gap: 8px; margin-top: 12px; }
+  .udara-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 11px;
+    border: 1px solid var(--garis); border-radius: 8px;
+  }
+  .udara-label { font-size: .78rem; color: var(--lembut); }
+  .udara-nilai { font-size: .8rem; font-weight: 600; }
+  .udara-nilai.aktif { color: var(--hijau); }
+  .udara-nilai.off { color: var(--lembut); }
+
+  /* ---------- grafik ---------- */
+  .grafik-kotak { position: relative; height: 240px; margin-top: 12px; }
+
+  /* ---------- tabel & catatan (rincian, disembunyikan default) ---------- */
+  .tabel-bungkus { overflow-x: auto; margin-top: 10px; max-height: 220px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th { text-align: left; font-size: .74rem; color: var(--lembut); padding: 7px 9px; border-bottom: 1px solid var(--garis); position: sticky; top: 0; background: var(--kartu); }
+  td { padding: 7px 9px; border-bottom: 1px solid var(--garis); }
+  tr:last-child td { border-bottom: none; }
+  .angka { font-variant-numeric: tabular-nums; }
+
+  .catatan { font-size: .82rem; color: var(--lembut); line-height: 1.75; }
+  .catatan li { margin-left: 17px; }
+  .kode {
+    display: block; margin-top: 8px; padding: 11px 13px;
+    background: var(--grad-halus); border: 1px solid var(--garis); border-radius: 8px;
+    font-family: Consolas, "Courier New", monospace; font-size: .76rem;
+    color: var(--teks); overflow-x: auto; white-space: pre;
+  }
+  .kaki { font-size: .76rem; color: var(--lembut); text-align: center; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; font-size: .86rem; font-weight: 600; }
+  summary:focus-visible { outline: 2px solid var(--biru); outline-offset: 2px; }
+
+  /* ---------- tablet & ponsel ---------- */
+  @media (max-width: 1080px) {
+    .papan {
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas: "bacaan grafik" "perangkat udara";
+    }
+  }
+  @media (max-width: 700px) {
+    .papan { grid-template-columns: 1fr; grid-template-areas: "bacaan" "grafik" "perangkat" "udara"; }
+    .zona-bacaan { grid-template-columns: 1fr 1fr; }
+    .angka-nilai { font-size: 2.2rem; }
+    .grafik-kotak { height: 220px; }
+  }
+  @media (max-width: 460px) {
+    .zona-bacaan { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="header">
+    <div>
+      <h1 class="judul">Sistem Pemantauan Suhu &amp; Kelembapan Mikroklimat Plain Yogurt</h1>
+      <p class="subjudul">Ruang fermentasi · Sensor DHT22 · ESP32</p>
+      <p class="sumber" id="sumber">Menyambung ke Firebase…</p>
+    </div>
+    <div class="kanan">
+      <span class="jam" id="jam">--:--:--</span>
+      <button class="tombol" id="mode">Mode gelap</button>
+    </div>
+  </header>
+
+  <div class="papan">
+
+    <!-- ===== KIRI: dua angka besar ===== -->
+    <div class="zona-bacaan">
+      <section class="kartu angka-kartu">
+        <div class="angka-label">Suhu</div>
+        <div><span class="angka-nilai" id="suhu">--.-</span><span class="angka-satuan">°C</span></div>
+        <div class="angka-ketinya" id="suhu-ketinya">menunggu bacaan…</div>
+        <span class="status ok" id="status-suhu">Normal</span>
+        <div class="mini">
+          <span>min <b id="suhu-min">-</b></span>
+          <span>rata <b id="suhu-rata">-</b></span>
+          <span>max <b id="suhu-max">-</b></span>
+        </div>
+      </section>
+
+      <section class="kartu angka-kartu">
+        <div class="angka-label">Kelembapan</div>
+        <div><span class="angka-nilai" id="lembap">--.-</span><span class="angka-satuan">%RH</span></div>
+        <div class="angka-ketinya" id="lembap-ketinya">menunggu bacaan…</div>
+        <span class="status ok" id="status-lembap">Normal</span>
+        <div class="mini">
+          <span>min <b id="lembap-min">-</b></span>
+          <span>rata <b id="lembap-rata">-</b></span>
+          <span>max <b id="lembap-max">-</b></span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== TENGAH: grafik ===== -->
+    <div class="zona-grafik">
+      <section class="kartu">
+        <div class="kepala">
+          <div>
+            <div class="kartu-judul">Riwayat 10 menit terakhir</div>
+            <div class="kartu-ketinya">DHT22 dibaca tiap 2 detik · 300 titik tersimpan</div>
+          </div>
+          <div class="kanan">
+            <button class="tombol aktif" data-metrik="keduanya">Semua</button>
+            <button class="tombol" data-metrik="suhu">Suhu</button>
+            <button class="tombol" data-metrik="lembap">RH</button>
+            <button class="tombol" id="jeda">Jeda</button>
+          </div>
+        </div>
+        <div class="grafik-kotak"><canvas id="grafik"></canvas></div>
+      </section>
+    </div>
+
+    <!-- ===== KANAN ATAS: nilai optimal + perangkat ===== -->
+    <div class="zona-perangkat">
+      <section class="kartu">
+        <div class="kepala">
+          <div>
+            <div class="kartu-judul">Nilai Optimal &amp; Kendali Perangkat</div>
+            <div class="kartu-ketinya">42,0–45,0 °C · 70–80 %RH</div>
+          </div>
+        </div>
+
+        <div class="monitor">
+          <div class="monitor-baris">
+            <span class="monitor-nama">Suhu</span>
+            <span class="monitor-nilai" id="nilai-suhu">—</span>
+          </div>
+          <div class="monitor-baris">
+            <span class="monitor-nama">Kelembapan</span>
+            <span class="monitor-nilai" id="nilai-lembap">—</span>
+          </div>
+        </div>
+
+        <div class="perangkat">
+          <div class="perangkat-kotak" id="kotak-heater">
+            <span class="led led-merah" id="led-heater"></span>
+            <div class="perangkat-teks">
+              <div class="perangkat-nama">Heater</div>
+              <div class="perangkat-ketinya" id="ketika-heater">Mati</div>
+            </div>
+          </div>
+
+          <div class="perangkat-kotak" id="kotak-kooler">
+            <span class="led led-biru" id="led-kooler"></span>
+            <div class="perangkat-teks">
+              <div class="perangkat-nama">Kooler / Kipas</div>
+              <div class="perangkat-ketinya" id="ketika-kooler">Mati</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="perangkat-pesan" id="pesan-sistem">Semua parameter berada pada rentang optimal.</p>
+      </section>
+    </div>
+
+    <!-- ===== KANAN BAWAH: status mesin udara ===== -->
+    <div class="zona-udara">
+      <section class="kartu">
+        <div class="kepala">
+          <div>
+            <div class="kartu-judul">Status Mesin Penstabil Udara</div>
+            <div class="kartu-ketinya">if-else otomatis dari slider DHT22</div>
+          </div>
+          <span class="platform">Blynk IoT</span>
+        </div>
+
+        <div class="udara" id="udara">
+          <div class="udara-judul" id="udara-judul">Menunggu data…</div>
+          <div class="udara-ketinya" id="udara-ketinya">—</div>
+        </div>
+
+        <div class="udara-detail">
+          <div class="udara-item">
+            <span class="udara-label">Humidifier</span>
+            <span class="udara-nilai" id="udara-humidifier">Mati</span>
+          </div>
+          <div class="udara-item">
+            <span class="udara-label">Dehumidifier</span>
+            <span class="udara-nilai" id="udara-dehumidifier">Mati</span>
+          </div>
+          <div class="udara-item">
+            <span class="udara-label">Pembacaan</span>
+            <span class="udara-nilai" id="udara-bacaan">— %RH</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+  <!-- ===== rincian, disembunyikan supaya layar utama tetap ringkas ===== -->
+  <section class="kartu">
+    <details>
+      <summary>Data mentah &amp; dokumentasi</summary>
+
+      <div class="kartu-ketinya" style="margin-top:10px">Riwayat bacaan terakhir, bisa dipakai untuk laporan.</div>
+      <div class="tabel-bungkus">
+        <table>
+          <thead>
+            <tr><th>Waktu</th><th>Suhu (°C)</th><th>Kelembapan (%RH)</th><th>Status</th></tr>
+          </thead>
+          <tbody id="isi-tabel"></tbody>
+        </table>
+      </div>
+
+      <div class="kartu-judul" style="margin-top:18px">Kenapa ada nilai optimal</div>
+      <ul class="catatan">
+        <li>Yogurt di fermentasi oleh bakteri asam laktat, yaitu <i>Streptococcus thermophilus</i> dan <i>Lactobacillus delbrueckii</i> subsp. <i>bulgaricus</i>.</li>
+        <li>Suhu optimal <b>42,0–45,0 °C</b>. Di bawah 42 °C bakteri starter bisa inaktif karena kedinginan. Di atas 45 °C enzim termal aktif dan yogurt bisa mulai mencair.</li>
+        <li>Kelembapan optimal <b>70–80 %RH</b>. Terlalu kering membuat permukaan produk mengering; terlalu lembap memicu titik air yang mempercepat kerusakan.</li>
+        <li><b>Heater</b> menyala otomatis kalau suhu di bawah 42 °C atau kelembapan keluar 70–80 %RH. <b>Kooler/kipas</b> menyala otomatis kalau suhu di atas 45 °C.</li>
+        <li>Status kelembapan memakai logika <b>if-else</b> tiga kondisi: di bawah 70 %RH <b>humidifier</b> menyala, di atas 80 %RH <b>dehumidifier</b> menyala, di antara 70–80 %RH semua mesin udara standby. Perintah dikirim lewat <b>Blynk IoT Platform</b>.</li>
+        <li>Semua angka bisa diubah di file <b>config.js</b> bagian <b>acuan</b>.</li>
+      </ul>
+
+      <div class="kartu-judul" style="margin-top:18px">Cara pasang DHT22</div>
+      <ul class="catatan">
+        <li>DHT22 punya 3 kaki: <b>VCC</b> (merah, 3,3–5 V), <b>DATA</b> (hijau/kuning), <b>GND</b> (hitam).</li>
+        <li>Pasang resistor <b>10 kΩ</b> antara DATA dan VCC. Tanpa resistor ini sensor tidak terbaca.</li>
+        <li>Jauhkan board dari kabel panjang, karena DHT22 sensitif terhadap panas dan memanaskan chipnya sendiri.</li>
+        <li>Jangan dibaca lebih cepat dari 1× per detik. Jeda 2 detik di kode ini sudah aman.</li>
+      </ul>
+
+      <div class="kartu-judul" style="margin-top:18px">Menyambungkan ke Firebase</div>
+      <ul class="catatan">
+        <li>Semua pengaturan ada di file <b>config.js</b>, terpisah dari halaman ini.</li>
+        <li>Buka <b>Realtime Database</b> di Firebase console, salin <b>Database URL</b>-nya.</li>
+        <li>Paste URL itu ke bagian <b>firebase.url</b> di file <b>config.js</b>.</li>
+        <li>Uji dari browser: buka <code>https://monitoring-plain-yogurt-default-rtdb.firebaseio.com/data.json</code>. Kalau muncul angka, berarti sudah ada isinya.</li>
+      </ul>
+
+      <details>
+        <summary>Aturan keamanan (Rules)</summary>
+        <span class="kode">{
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}</span>
+        <p class="catatan" style="margin-top:10px">
+          Aturan di atas cocok untuk demo, tapi berarti siapa pun bisa menulis angka palsu.
+          Setelah demo selesai, minta temanmu batasi bagian <b>.write</b> dengan token
+          supaya hanya ESP32 tim yang boleh mengirim data.
+        </p>
+      </details>
+
+      <details>
+        <summary>Kode ESP32 mengirim ke Firebase</summary>
+        <p class="catatan" style="margin-top:8px">Install library <b>ArduinoJson</b> lewat Library Manager, lalu upload kode ini.</p>
+        <span class="kode">#include &lt;WiFi.h&gt;
+#include &lt;HTTPClient.h&gt;
+#include &lt;ArduinoJson.h&gt;
+#include &lt;DHT.h&gt;
+
+const char* WIFI_SSID   = "nama-wifi";
+const char* WIFI_PASS   = "password";
+const char* URL_FB      = "https://monitoring-plain-yogurt-default-rtdb.firebaseio.com/data.json";
+
+#define PIN_DHT 4
+DHT dht(PIN_DHT, DHT22);
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.print("Menghubungkan wifi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(" tersambung");
+}
+
+void loop() {
+  float suhu   = dht.readTemperature();
+  float lembap = dht.readHumidity();
+
+  if (isnan(suhu) || isnan(lembap)) {
+    Serial.println("Gagal membaca DHT22");
+  } else {
+    StaticJsonDocument<120> doc;
+    doc["suhu"]       = suhu;
+    doc["kelembapan"] = lembap;
+
+    String muatan;
+    serializeJson(doc, muatan);
+
+    HTTPClient http;
+    http.begin(URL_FB);
+    http.addHeader("Content-Type", "application/json");
+    int kode = http.POST(muatan);
+
+    if (kode > 0) {
+      Serial.print("Terkirim: "); Serial.println(muatan);
+    } else {
+      Serial.print("Gagal kirim, error: "); Serial.println(http.errorToString(kode));
+    }
+    http.end();
+  }
+
+  delay(5000);   // kirim setiap 5 detik
+}</span>
+      </details>
+    </details>
+  </section>
+
+  <p class="kaki">Kalau Firebase belum terhubung, halaman ini otomatis memakai data contoh.</p>
+
+</div>
+
+<script>
+/* =========================================================
+   Semua pengaturan ada di file config.js
+   (URL Firebase, node, jeda pembacaan, acuan suhu/kelembapan)
+   ========================================================= */
+const KONF = KONFIGURASI;
+
+// rentang optimal untuk plain yogurt
+const TARGET = {
+  suhu:   { set: KONF.acuan.suhu.set,   min: KONF.acuan.suhu.min,   max: KONF.acuan.suhu.max, aman: KONF.acuan.suhu.aman },
+  lembap: { set: KONF.acuan.lembap.set, min: KONF.acuan.lembap.min, max: KONF.acuan.lembap.max }
+};
+
+const URL_FIREBASE = KONF.firebase.url;
+const JALUR_SENSOR = KONF.firebase.node;
+const JEDA_AMBIL   = KONF.pembacaan.jedaAmbil;
+const MAKS_TITIK   = KONF.pembacaan.maksTitik;
+
+const jarak = { waktu: [], suhu: [], lembap: [] };
+
+const data = { suhu: TARGET.suhu.set, lembap: TARGET.lembap.set };
+const ringkasan = {
+  suhu:   { min: TARGET.suhu.set,   max: TARGET.suhu.set,   total: 0, n: 0 },
+  lembap: { min: TARGET.lembap.set, max: TARGET.lembap.set, total: 0, n: 0 }
+};
+
+let grafik = null;
+let metrik = 'keduanya';
+let sumberData = 'contoh';   // 'firebase' atau 'contoh'
+let timer = null;
+
+/* =========================================================
+   Hitung status
+   ========================================================= */
+function statusNilai(nilai, t) {
+  if (nilai >= t.min && nilai <= t.max) return { kelas: 'ok', teks: 'Dalam rentang' };
+  const jauh = Math.min(Math.abs(nilai - t.min), Math.abs(nilai - t.max));
+  return jauh <= 0.5
+    ? { kelas: 'amber', teks: 'Mulai menyimpang' }
+    : { kelas: 'merah', teks: 'Perlu tindakan' };
+}
+
+function waktu(now) {
+  return new Date(now).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function duaAngka(n) { return n.toFixed(1); }
+
+/* =========================================================
+   Status nilai optimal, ditampilkan dalam bentuk teks saja
+   ========================================================= */
+function gambarOptimal(nilai, o, satuan) {
+  let kelas, teks;
+
+  if (nilai >= o.min && nilai <= o.max) {
+    // masih berada di rentang optimal
+    kelas = 'tepat';
+    teks = 'dalam rentang';
+  } else if (nilai < o.min) {
+    // terlalu rendah
+    kelas = 'jauh';
+    teks = duaAngka(o.min - nilai) + ' ' + satuan + ' di bawah';
+  } else {
+    // terlalu tinggi
+    kelas = 'jauh';
+    teks = duaAngka(nilai - o.max) + ' ' + satuan + ' di atas';
+  }
+
+  return { kelas: kelas, teks: teks };
+}
+
+function perbaruiOptimal() {
+  const daftar = [
+    { kunci: 'suhu',   nilai: data.suhu,   satuan: '°C',   o: TARGET.suhu },
+    { kunci: 'lembap', nilai: data.lembap, satuan: '%RH', o: TARGET.lembap }
+  ];
+
+  daftar.forEach(b => {
+    const h = gambarOptimal(b.nilai, b.o, b.satuan);
+
+    const nilai = document.getElementById('nilai-' + b.kunci);
+    nilai.textContent = duaAngka(b.nilai) + ' ' + b.satuan + ' · ' + h.teks;
+    nilai.className = 'monitor-nilai ' + h.kelas;
+  });
+}
+
+/* =========================================================
+   Kendali perangkat
+
+   Heater  menyala  : suhu di bawah 42 °C ATAU kelembapan di
+                      luar 70-80 %RH
+                      Gunanya menaikkan suhu ruangan supaya
+                      bakteri starter tidak inaktif karena dingin.
+
+   Kooler  menyala  : suhu di atas 45 °C
+                      Gunanya meniupkan udara dingin supaya yogurt
+                      tidak mencair akibat aktivasi enzim termal.
+   ========================================================= */
+function perbaruiPerangkat() {
+  const suhu   = data.suhu;
+  const lembap = data.lembap;
+  const batasAtasSuhu = TARGET.suhu.aman;   // 45 °C
+
+  const suhuRendah   = suhu < TARGET.suhu.min;              // < 42
+  const lembapRendah = lembap < TARGET.lembap.min;         // < 70
+  const lembapTinggi = lembap > TARGET.lembap.max;         // > 80
+  const suhuTinggi   = suhu > batasAtasSuhu;                // > 45
+
+  // heater menyala kalau ruangan perlu dihangatkan
+  const heater = suhuRendah || lembapRendah || lembapTinggi;
+  // kooler menyala kalau terlalu panas
+  const kooler = suhuTinggi;
+
+  const ledHeater = document.getElementById('led-heater');
+  const ledKooler = document.getElementById('led-kooler');
+  const kotHeater = document.getElementById('kotak-heater');
+  const kotKooler = document.getElementById('kotak-kooler');
+
+  ledHeater.className = 'led led-merah' + (heater ? ' nyala' : '');
+  ledKooler.className  = 'led led-biru'  + (kooler  ? ' nyala' : '');
+  kotHeater.className  = 'perangkat-kotak' + (heater ? ' nyala-merah' : '');
+  kotKooler.className  = 'perangkat-kotak' + (kooler  ? ' nyala-biru' : '');
+
+  document.getElementById('ketika-heater').textContent = heater
+    ? 'Aktif — sedang menaikkan suhu ruangan'
+    : 'Mati';
+  document.getElementById('ketika-kooler').textContent = kooler
+    ? 'Aktif — sedang meniupkan udara dingin'
+    : 'Mati';
+
+  // penjelasan singkat
+  const pesan = [];
+  if (kooler) {
+    pesan.push('Suhu ' + duaAngka(suhu) + ' °C di atas ' + duaAngka(batasAtasSuhu) +
+      ' °C. Kooler/kipas besar menyala untuk menurunkan suhu dan mencegah yogurt mencair akibat enzim termal.');
+  } else if (heater) {
+    if (suhuRendah) pesan.push('Suhu ' + duaAngka(suhu) + ' °C di bawah ' + duaAngka(TARGET.suhu.min) +
+      ' °C. Heater menyala untuk menaikkan suhu.');
+    if (lembapRendah) pesan.push('Kelembapan ' + duaAngka(lembap) + ' %RH di bawah ' +
+      duaAngka(TARGET.lembap.min) + ' %RH. Heater menyala untuk menaikkan kelembapan.');
+    if (lembapTinggi) pesan.push('Kelembapan ' + duaAngka(lembap) + ' %RH di atas ' +
+      duaAngka(TARGET.lembap.max) + ' %RH. Heater menyala untuk menurunkan kelembapan.');
+    pesan.push('Tujuannya menjaga bakteri starter tetap aktif.');
+  } else {
+    pesan.push('Semua parameter berada pada rentang optimal, tidak ada perangkat yang perlu dinyalakan.');
+  }
+  document.getElementById('pesan-sistem').textContent = pesan.join(' ');
+}
+
+/* =========================================================
+   STATUS MESIN PENSTABIL UDARA
+
+   Logika if-else sesuai generationalan:
+     Kondisi 1 : Kelembapan < 70 %RH
+                 -> Humidifier menyala untuk menyprot uap air
+     Kondisi 2 : Kelembapan > 80 %RH
+                 -> Dehumidifier menyala untuk menyerap uap air
+     Kondisi 3 : Kelembapan 70 - 80 %RH
+                 -> Semua mesin udara standby
+
+   Kontrolnya dibaca dari Blynk IoT Platform.
+   ========================================================= */
+function perbaruiUdara() {
+  const h      = data.lembap;
+  const bawah  = TARGET.lembap.min;   // 70 %RH
+  const atas   = TARGET.lembap.max;   // 80 %RH
+
+  const kotak     = document.getElementById('udara');
+  const judul     = document.getElementById('udara-judul');
+  const ketikanya = document.getElementById('udara-ketinya');
+  const humid     = document.getElementById('udara-humidifier');
+  const dehumid   = document.getElementById('udara-dehumidifier');
+
+  let kelas, pesan;
+
+  /* ---------- IF - ELSE tiga kondisi ---------- */
+  if (h < bawah) {
+    // KONDISI 1: Kelembapan terlalu kering
+    kelas = 'kering';
+    pesan = '⚠️ WARNING: Kelembapan Terlalu Kering! [Sistem Humidifier Otomatis AKTIF untuk Menyprot Uap Air] [Blynk IoT Platform]';
+  } else if (h > atas) {
+    // KONDISI 2: Kelembapan terlalu basah
+    kelas = 'basah';
+    pesan = '❌ CRITICAL ALERT: Kelembapan Terlalu Basah! Risiko Jamur. [Sistem Dehumidifier Otomatis AKTIF untuk Menyerap Uap Air] [Blynk IoT Platform]';
+  } else {
+    // KONDISI 3: Kelembapan optimal
+    kelas = 'optimal';
+    pesan = '✅ Kelembapan Optimal (Sistem Udara Standby) [Blynk IoT Platform]';
+  }
+
+  // terapkan ke tampilan
+  kotak.className = 'udara ' + kelas;
+  judul.textContent = pesan;
+
+  // keterangan angka aslinya
+  ketikanya.textContent = 'Pembacaan DHT22 ' + duaAngka(h) + ' %RH · batas ideal ' +
+    duaAngka(bawah) + '–' + duaAngka(atas) + ' %RH';
+
+  // status tiap mesin
+  const humidAktif   = kelas === 'kering';
+  const dehumidAktif = kelas === 'basah';
+
+  humid.textContent   = humidAktif   ? 'AKTIF' : 'Mati';
+  humid.className     = 'udara-nilai ' + (humidAktif   ? 'aktif' : 'off');
+  dehumid.textContent = dehumidAktif ? 'AKTIF' : 'Mati';
+  dehumid.className   = 'udara-nilai ' + (dehumidAktif ? 'aktif' : 'off');
+
+  document.getElementById('udara-bacaan').textContent = duaAngka(h) + ' %RH';
+}
+
+/* =========================================================
+   Ambil data: dari Firebase, kalau tidak ada pakai data contoh
+
+   Field yang dibaca dari database:
+     suhu        -> wajib
+     lembap      -> boleh "lembap" atau "kelembapan"
+   ========================================================= */
+async function ambilData() {
+  try {
+    const balasan = await fetch(URL_FIREBASE + '/' + JALUR_SENSOR + '.json', { cache: 'no-store' });
+
+    if (balasan.ok) {
+      const json = await balasan.json();
+
+      if (json && typeof json.suhu === 'number') {
+        // database temanmu memakai nama "kelembapan"
+        const lembap = typeof json.lembap === 'number' ? json.lembap : json.kelembapan;
+
+        if (typeof lembap === 'number') {
+          sumberData = 'firebase';
+          return { suhu: json.suhu, lembap: lembap };
+        }
+      }
+    }
+  } catch (e) {
+    // Firebase belum terhubung atau offline, lanjut pakai data contoh
+  }
+
+  sumberData = 'contoh';
+
+  // data contoh: nilai bergerak pelan-pelan seperti bacaan sensor sungguhan
+  const s = KONF.simulasi;
+  data.suhu   = +(data.suhu   + (TARGET.suhu.set   - data.suhu)   * s.tarikan + (Math.random() - 0.5) * s.acuanSuhu).toFixed(2);
+  data.lembap = +(data.lembap + (TARGET.lembap.set - data.lembap) * s.tarikan + (Math.random() - 0.5) * s.acuanLembap).toFixed(1);
+
+  return { suhu: data.suhu, lembap: data.lembap };
+}
+
+/* =========================================================
+   Update tampilan
+   ========================================================= */
+function tampilkan(now) {
+  // angka besar
+  document.getElementById('suhu').textContent = duaAngka(data.suhu);
+  document.getElementById('lembap').textContent = duaAngka(data.lembap);
+  document.getElementById('suhu-ketinya').textContent =
+    'Optimal ' + duaAngka(TARGET.suhu.min) + '–' + duaAngka(TARGET.suhu.max) + ' °C';
+  document.getElementById('lembap-ketinya').textContent =
+    'Optimal ' + duaAngka(TARGET.lembap.min) + '–' + duaAngka(TARGET.lembap.max) + ' %RH';
+
+  // sumber data
+  const sumber = document.getElementById('sumber');
+  const dariFirebase = sumberData === 'firebase';
+  sumber.className = 'sumber' + (dariFirebase ? ' sambar-hidup' : '');
+  sumber.innerHTML = '<span class="titik"></span>' +
+    (dariFirebase
+      ? 'Terhubung ke Firebase · data sensor DHT22'
+      : 'Belum terhubung ke Firebase · memakai data contoh');
+
+  // status
+  const st = statusNilai(data.suhu, TARGET.suhu);
+  const el = document.getElementById('status-suhu');
+  el.className = 'status ' + st.kelas;
+  el.textContent = st.teks;
+
+  const sl = statusNilai(data.lembap, TARGET.lembap);
+  const el2 = document.getElementById('status-lembap');
+  el2.className = 'status ' + sl.kelas;
+  el2.textContent = sl.teks;
+
+  // nilai optimal + perangkat
+  perbaruiOptimal();
+  perbaruiPerangkat();
+  perbaruiUdara();
+
+  // min / rata / max
+  ['suhu', 'lembap'].forEach(k => {
+    const r = ringkasan[k];
+    document.getElementById(k + '-min').textContent = duaAngka(r.min);
+    document.getElementById(k + '-rata').textContent = duaAngka(r.total / r.n);
+    document.getElementById(k + '-max').textContent = duaAngka(r.max);
+  });
+
+  // grafik
+  grafik.data.labels = jarak.waktu;
+  grafik.data.datasets[0].data = jarak.suhu;
+  grafik.data.datasets[0].hidden = metrik === 'lembap';
+  grafik.data.datasets[1].data = jarak.lembap;
+  grafik.data.datasets[1].hidden = metrik === 'suhu';
+  grafik.update('none');
+
+  // tabel
+  document.getElementById('isi-tabel').innerHTML =
+    '<tr><td>' + waktu(now) + '</td>' +
+    '<td class="angka">' + duaAngka(data.suhu) + '</td>' +
+    '<td class="angka">' + duaAngka(data.lembap) + '</td>' +
+    '<td><span class="status ' + st.kelas + '">' + st.teks + '</span></td></tr>';
+}
+
+function updateRingkasan() {
+  ['suhu', 'lembap'].forEach(k => {
+    const r = ringkasan[k];
+    const v = data[k];
+    r.min = Math.min(r.min, v);
+    r.max = Math.max(r.max, v);
+    r.total += v;
+    r.n++;
+  });
+}
+
+function simpanTitik(now) {
+  jarak.waktu.push(waktu(now));
+  jarak.suhu.push(+data.suhu.toFixed(1));
+  jarak.lembap.push(+data.lembap.toFixed(1));
+  if (jarak.waktu.length > MAKS_TITIK) {
+    jarak.waktu.shift();
+    jarak.suhu.shift();
+    jarak.lembap.shift();
+  }
+}
+
+/* =========================================================
+   Grafik
+   ========================================================= */
+function buatGrafik() {
+  const gelap = document.body.classList.contains('dark');
+  grafik = new Chart(document.getElementById('grafik').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Suhu (°C)',
+          data: [],
+          borderColor: '#EF4444',
+          backgroundColor: 'rgba(239,68,68,.10)',
+          borderWidth: 2, fill: true, tension: 0,
+          pointRadius: 0, pointHoverRadius: 4, yAxisID: 'ySuhu'
+        },
+        {
+          label: 'Kelembapan (%RH)',
+          data: [],
+          borderColor: '#3B82F6',
+          backgroundColor: 'rgba(59,130,246,.10)',
+          borderWidth: 2, fill: true, tension: 0,
+          pointRadius: 0, pointHoverRadius: 4, yAxisID: 'yLembap'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: gelap ? '#94A3B8' : '#64748B', font: { size: 12 } } },
+        tooltip: { displayColors: true }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { size: 11 } } },
+        ySuhu: {
+          position: 'left',
+          min: 35, max: 50,
+          title: { display: true, text: 'Suhu (°C)', font: { size: 12 } },
+          grid: { color: gelap ? '#24334D' : '#E2E8F0' },
+          ticks: { font: { size: 11 } }
+        },
+        yLembap: {
+          position: 'right',
+          min: 55, max: 95,
+          title: { display: true, text: 'Kelembapan (%RH)', font: { size: 12 } },
+          grid: { display: false },
+          ticks: { font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+/* =========================================================
+   Loop 2 detik
+   ========================================================= */
+async function tick() {
+  const hasil = await ambilData();
+  data.suhu = hasil.suhu;
+  data.lembap = hasil.lembap;
+
+  updateRingkasan();
+  const now = Date.now();
+  simpanTitik(now);
+  tampilkan(now);
+}
+
+/* =========================================================
+   Mulai
+   ========================================================= */
+document.addEventListener('DOMContentLoaded', async () => {
+  // isi riwayat awal supaya grafik langsung ada
+  const now = Date.now();
+  for (let i = MAKS_TITIK - 1; i >= 0; i--) {
+    jarak.waktu.push(waktu(now - i * JEDA_AMBIL));
+    jarak.suhu.push(+(TARGET.suhu.set + (Math.random() - .5) * .5).toFixed(1));
+    jarak.lembap.push(+(TARGET.lembap.set + (Math.random() - .5) * 2).toFixed(1));
+  }
+
+  document.getElementById('jam').textContent = waktu(Date.now());
+  buatGrafik();
+  await tick();
+  timer = setInterval(tick, JEDA_AMBIL);
+  setInterval(() => {
+    document.getElementById('jam').textContent = waktu(Date.now());
+  }, 1000);
+
+  // ganti metrik
+  document.querySelectorAll('[data-metrik]').forEach(tombol => {
+    tombol.addEventListener('click', () => {
+      metrik = tombol.dataset.metrik;
+      document.querySelectorAll('[data-metrik]').forEach(t => t.classList.toggle('aktif', t === tombol));
+      tampilkan(Date.now());
+    });
+  });
+
+  // jeda / lanjut
+  document.getElementById('jeda').addEventListener('click', function () {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+      this.textContent = 'Lanjut';
+    } else {
+      timer = setInterval(tick, JEDA_AMBIL);
+      this.textContent = 'Jeda';
+    }
+  });
+
+  // terang / gelap
+  document.getElementById('mode').addEventListener('click', function () {
+    document.body.classList.toggle('dark');
+    this.textContent = document.body.classList.contains('dark') ? 'Mode terang' : 'Mode gelap';
+    const gelap = document.body.classList.contains('dark');
+    grafik.options.scales.ySuhu.grid.color = gelap ? '#24334D' : '#E2E8F0';
+    grafik.options.plugins.legend.labels.color = gelap ? '#94A3B8' : '#64748B';
+    grafik.update('none');
+  });
+});
+</script>
+</body>
+</html>
